@@ -1,0 +1,359 @@
+
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8"/>
+<style>
+*{box-sizing:border-box}
+body{font-family:Inter,system-ui,sans-serif;margin:0;padding:16px;background:#f7f8fa;color:#111}
+.header{display:flex;align-items:center;justify-content:space-between;margin-bottom:12px}
+h2{margin:0;font-size:20px}
+.winBtns button{margin-left:6px;padding:4px 8px;border-radius:6px;border:1px solid #ccc;background:#fff;cursor:pointer}
+
+.section{background:#fff;border-radius:12px;padding:12px;margin-bottom:12px;box-shadow:0 1px 3px rgba(0,0,0,.08)}
+.row{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+label{font-size:12px;font-weight:600;color:#555}
+select,input{width:100%;padding:8px 10px;border-radius:8px;border:1px solid #ddd;font-size:13px;margin-top:4px}
+input:disabled{background:#f0f0f0;color:#888}
+.presets{display:flex;gap:8px;margin-top:8px}
+.preset-btn{flex:1;padding:10px;border-radius:10px;border:1px solid #ddd;background:#fafafa;font-size:12px;cursor:pointer;text-align:center}
+.preset-btn.active{background:#e8f2ff;border-color:#4c9ffe;color:#1a73e8;font-weight:600}
+.checkbox{display:flex;align-items:center;gap:8px;margin-top:10px;font-size:12px}
+.actions{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+button.primary{padding:12px;border:none;border-radius:12px;background:#4c9ffe;color:#fff;font-size:14px;font-weight:600;cursor:pointer}
+button.secondary{padding:12px;border-radius:12px;background:#eef2f7;color:#333;font-size:14px;font-weight:600;border:1px solid #d9dde3;cursor:pointer}
+.error{color:#d93025;font-size:12px;margin-top:8px}
+.file{margin-top:8px;padding:8px;background:#f5f7fa;border-radius:8px;font-size:12px}
+.preview{margin-top:10px;padding:10px;background:#fff;border-radius:12px;border:1px solid #e0e0e0}
+.preview-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.preview img{max-width:100%;border-radius:8px;border:1px solid #ddd;cursor:zoom-in}
+small{color:#555}
+
+/* Fullscreen viewer */
+#viewer{
+  position:fixed; inset:0; background:rgba(0,0,0,.85);
+  display:none; align-items:center; justify-content:center; z-index:9999;
+}
+#viewer .wrap{
+  max-width:100vw; max-height:100vh; overflow:auto; position:relative;
+}
+#viewer img{display:block; transform-origin: top left;}
+#viewer .meta{
+  position:fixed; top:10px; left:50%; transform:translateX(-50%);
+  background:#111; color:#fff; padding:6px 10px; border-radius:8px; font-size:12px;
+}
+#viewer .close{
+  position:fixed; top:10px; right:10px; background:#fff; border:none;
+  border-radius:8px; padding:6px 10px; cursor:pointer; font-weight:600;
+}
+#viewer .zoom{
+  position:fixed; bottom:20px; left:50%; transform:translateX(-50%);
+  display:flex; gap:10px;
+}
+#viewer .zoom button{
+  padding:8px 12px;border:none;border-radius:10px;background:#fff;cursor:pointer;font-weight:700;
+}
+</style>
+</head>
+<body>
+
+<div class="header">
+  <h2>Frame Export & Compress</h2>
+  <div class="winBtns">
+    <button id="winMinus">–</button>
+    <button id="winPlus">+</button>
+  </div>
+</div>
+
+<div class="section">
+  <div class="row">
+    <div>
+      <label>Format</label>
+      <select id="format"><option value="PNG">PNG</option><option value="JPEG">JPEG</option></select>
+    </div>
+    <div>
+      <label>Scale (DPI)</label>
+      <select id="scale">
+        <option value="1">1× (~72)</option>
+        <option value="2">2× (~144)</option>
+        <option value="3">3× (~216)</option>
+        <option value="4">4× (~288)</option>
+      </select>
+    </div>
+  </div>
+</div>
+
+<div class="section">
+  <label>Preset</label>
+  <div class="presets">
+    <div class="preset-btn active" data-type="custom" data-val="1.5">Custom</div>
+    <div class="preset-btn" data-type="brand" data-val="1.5">Brand.com<br/><small>&lt; 1.5 MB</small></div>
+    <div class="preset-btn" data-type="paid" data-val="5">Paid Media<br/><small>&lt; 5 MB</small></div>
+  </div>
+  <div style="margin-top:10px" id="customTarget">
+    <label>Target size (MB)</label>
+    <input id="target" type="number" step="0.1" value="1.5"/>
+  </div>
+  <div class="checkbox">
+    <input type="checkbox" id="autoScale" checked/>
+    <label for="autoScale">Auto adjust DPI to fit target (keep ratio)</label>
+  </div>
+</div>
+
+<div class="actions">
+  <button class="secondary" id="previewBtn">Preview & Estimate</button>
+  <button class="primary" id="exportBtn">Export & Save</button>
+</div>
+
+<div id="error" class="error"></div>
+<div id="results"></div>
+<div id="previews"></div>
+
+<!-- Fullscreen viewer -->
+<div id="viewer">
+  <div class="meta" id="viewerMeta"></div>
+  <button class="close" id="viewerClose">✕</button>
+  <div class="wrap">
+    <img id="viewerImg" />
+  </div>
+  <div class="zoom">
+    <button id="zoomOut">−</button>
+    <button id="zoomIn">＋</button>
+  </div>
+</div>
+
+<script>
+const results=document.getElementById('results');
+const previews=document.getElementById('previews');
+const errorDiv=document.getElementById('error');
+const targetInput=document.getElementById('target');
+const customTarget=document.getElementById('customTarget');
+const autoScaleEl=document.getElementById('autoScale');
+
+let winW=800, winH=700;
+document.getElementById('winMinus').onclick=()=>{
+  winW-=80; winH-=60;
+  parent.postMessage({pluginMessage:{type:'resize',width:winW,height:winH}},'*');
+};
+document.getElementById('winPlus').onclick=()=>{
+  winW+=80; winH+=60;
+  parent.postMessage({pluginMessage:{type:'resize',width:winW,height:winH}},'*');
+};
+
+const viewer=document.getElementById('viewer');
+const viewerImg=document.getElementById('viewerImg');
+const viewerMeta=document.getElementById('viewerMeta');
+let zoom=1;
+
+function applyZoom(){
+  viewerImg.style.transform = `scale(${zoom})`;
+}
+
+document.getElementById('zoomIn').onclick=()=>{ zoom=Math.min(5, zoom+0.2); applyZoom(); };
+document.getElementById('zoomOut').onclick=()=>{ zoom=Math.max(0.2, zoom-0.2); applyZoom(); };
+
+document.getElementById('viewerClose').onclick=()=>viewer.style.display='none';
+viewer.onclick=(e)=>{ if(e.target===viewer) viewer.style.display='none'; };
+document.addEventListener('keydown',(e)=>{
+  if(e.key==='Escape' && viewer.style.display==='flex'){
+    viewer.style.display='none';
+  }
+});
+
+document.querySelectorAll('.preset-btn').forEach(btn=>{
+  btn.addEventListener('click',()=>{
+    document.querySelectorAll('.preset-btn').forEach(b=>b.classList.remove('active'));
+    btn.classList.add('active');
+    if(btn.dataset.type==="custom"){
+      customTarget.style.display="block";
+      targetInput.disabled=false;
+    }else{
+      targetInput.value=btn.dataset.val;
+      targetInput.disabled=true;
+      customTarget.style.display="none";
+    }
+    if(previews.children.length>0){ send(true); }
+  });
+});
+
+function send(preview=false){
+  results.innerHTML=""; previews.innerHTML=""; errorDiv.textContent="";
+  parent.postMessage({pluginMessage:{
+    type:"export",
+    format:document.getElementById('format').value,
+    scale:Number(document.getElementById('scale').value),
+    target:Number(targetInput.value),
+    autoScale:autoScaleEl.checked,
+    preview
+  }},'*');
+}
+document.getElementById('exportBtn').onclick=()=>send(false);
+document.getElementById('previewBtn').onclick=()=>send(true);
+
+function bytesToBlob(bytes,type){return new Blob([new Uint8Array(bytes)],{type});}
+
+async function compressJPEG(blob,targetMB){
+  const img=new Image(); img.src=URL.createObjectURL(blob); await img.decode();
+  const c=document.createElement('canvas'); c.width=img.width; c.height=img.height;
+  c.getContext('2d').drawImage(img,0,0);
+  let q=0.9, out=await new Promise(r=>c.toBlob(r,'image/jpeg',q));
+  while(out.size/(1024*1024)>targetMB && q>0.05){
+    q-=0.05; out=await new Promise(r=>c.toBlob(r,'image/jpeg',q));
+  }
+  return out;
+}
+
+function openViewer(src,w,h){
+  zoom=1; applyZoom();
+  viewerImg.src=src;
+  viewerMeta.textContent=`${w} × ${h}px (Actual size)`;
+  viewer.style.display='flex';
+}
+
+let downloadIndex = 0;
+
+onmessage=async(e)=>{
+  const msg=e.data.pluginMessage;
+  if(msg.type==="count"){ expected=msg.total; received=0; zipFiles=[]; zipName=msg.zipName||'exports'; }
+  if(msg.type==="file"){
+    const target=msg.target, format=msg.format;
+    const origBlob=bytesToBlob(msg.bytes, format==="PNG"?"image/png":"image/jpeg");
+    const origMB=origBlob.size/(1024*1024);
+
+    let finalBlob=origBlob;
+    if(format==="JPEG") finalBlob=await compressJPEG(origBlob,target);
+    const finalMB=finalBlob.size/(1024*1024);
+
+    if(!msg.preview && finalMB>target){
+      if(msg.autoScale && msg.scale>1){
+        const ratio=Math.sqrt(target/finalMB);
+        const newScale=Math.max(1,Math.round(msg.scale*ratio*100)/100);
+        parent.postMessage({pluginMessage:{
+          type:"reexport",
+          nodeId:msg.nodeId,
+          format:msg.format,
+          scale:newScale,
+          target:msg.target,
+          autoScale:msg.autoScale,
+          preview:msg.preview
+        }},'*');
+        return;
+      }else{
+        errorDiv.textContent=`❌ ${msg.name} exceeds limit (${finalMB.toFixed(2)} MB > ${target} MB).`;
+        return;
+      }
+    }
+
+    if(msg.preview){
+      const wrap=document.createElement('div');
+      wrap.className='preview';
+      const grid=document.createElement('div');
+      grid.className='preview-grid';
+
+      const before=document.createElement('div');
+      before.innerHTML=`<strong>Estimated export size</strong><br/><small>${origMB.toFixed(2)} MB</small>`;
+      const img1=document.createElement('img');
+      const src1=URL.createObjectURL(origBlob);
+      img1.src=src1;
+      img1.onclick=()=>openViewer(src1, msg.width, msg.height);
+      before.appendChild(img1);
+      grid.appendChild(before);
+
+      if(format==="JPEG"){
+        const after=document.createElement('div');
+        after.innerHTML=`<strong>After</strong><br/><small>${finalMB.toFixed(2)} MB</small>`;
+        const img2=document.createElement('img');
+        const src2=URL.createObjectURL(finalBlob);
+        img2.src=src2;
+        img2.onclick=()=>openViewer(src2, msg.width, msg.height);
+        after.appendChild(img2);
+        grid.appendChild(after);
+      }
+
+      wrap.innerHTML=`<div><strong>${msg.name}</strong><br/>
+        <small>${msg.width}×${msg.height}px · ~${msg.dpi} DPI</small></div>`;
+      wrap.appendChild(grid);
+      previews.appendChild(wrap);
+    }else{
+      const arr = new Uint8Array(await finalBlob.arrayBuffer());
+      zipFiles.push({ name: `${msg.name}.${format.toLowerCase()}`, data: arr });
+      if(zipFiles.length === expected){
+        const zip = makeZip(zipFiles);
+        const url = URL.createObjectURL(zip);
+        const a=document.createElement('a');
+        a.href=url; a.download=`${zipName}.zip`;
+        document.body.appendChild(a); a.click(); a.remove();
+      }
+
+      const div=document.createElement('div');
+      div.className='file';
+      div.innerHTML=`<strong>Saved: ${msg.name}.${format.toLowerCase()}</strong><br/>
+        <small>Before: ${origMB.toFixed(2)} MB → After: ${finalMB.toFixed(2)} MB</small>`;
+      results.appendChild(div);
+    }
+  }
+};
+
+function autoRefresh(){
+  if(previews.children.length>0){
+    send(true);
+  }
+}
+document.getElementById('format').addEventListener('change', autoRefresh);
+document.getElementById('scale').addEventListener('change', autoRefresh);
+document.getElementById('target').addEventListener('input', autoRefresh);
+document.getElementById('autoScale').addEventListener('change', autoRefresh);
+
+
+let expected = 0, received = 0, zipFiles = [], zipName = "exports";
+
+// CRC32
+const crcTable=new Uint32Array(256).map((t,i)=>{let c=i;for(let k=0;k<8;k++)c=c&1?0xEDB88320^(c>>>1):c>>>1;return c>>>0;});
+function crc32(buf){let c=0^(-1);for(let i=0;i<buf.length;i++)c=(c>>>8)^crcTable[(c^buf[i])&255];return (c^(-1))>>>0;}
+
+function makeZip(entries){
+  let parts=[], central=[], offset=0;
+  entries.forEach(e=>{
+    const nameBytes=new TextEncoder().encode(e.name);
+    const data=e.data;
+    const crc=crc32(data);
+    const lh=new Uint8Array(30+nameBytes.length);
+    const dv=new DataView(lh.buffer);
+    dv.setUint32(0,0x04034b50,true); dv.setUint16(4,20,true); dv.setUint16(6,0,true);
+    dv.setUint16(8,0,true); dv.setUint16(10,0,true); dv.setUint16(12,0,true);
+    dv.setUint32(14,crc,true); dv.setUint32(18,data.length,true); dv.setUint32(22,data.length,true);
+    dv.setUint16(26,nameBytes.length,true); dv.setUint16(28,0,true);
+    lh.set(nameBytes,30);
+    parts.push(lh, data);
+    const ch=new Uint8Array(46+nameBytes.length);
+    const dv2=new DataView(ch.buffer);
+    dv2.setUint32(0,0x02014b50,true); dv2.setUint16(4,20,true); dv2.setUint16(6,20,true);
+    dv2.setUint16(8,0,true); dv2.setUint16(10,0,true); dv2.setUint16(12,0,true);
+    dv2.setUint16(14,0,true); dv2.setUint32(16,crc,true); dv2.setUint32(20,data.length,true);
+    dv2.setUint32(24,data.length,true); dv2.setUint16(28,nameBytes.length,true);
+    dv2.setUint16(30,0,true); dv2.setUint16(32,0,true); dv2.setUint16(34,0,true);
+    dv2.setUint16(36,0,true); dv2.setUint32(38,0,true); dv2.setUint32(42,offset,true);
+    ch.set(nameBytes,46);
+    central.push(ch);
+    offset+=lh.length+data.length;
+  });
+  const cdSize=central.reduce((s,b)=>s+b.length,0);
+  const eocd=new Uint8Array(22);
+  const dv3=new DataView(eocd.buffer);
+  dv3.setUint32(0,0x06054b50,true); dv3.setUint16(8,entries.length,true);
+  dv3.setUint16(10,entries.length,true); dv3.setUint32(12,cdSize,true);
+  dv3.setUint32(16,offset,true); dv3.setUint16(20,0,true);
+  return new Blob([...parts, ...central, eocd], {type:'application/zip'});
+}
+
+</script>
+
+<footer style="margin-top:16px;padding-top:8px;border-top:1px solid #e0e0e0;font-size:12px;color:#666;text-align:center;">
+  Designed by <strong>Salman Shaikh</strong> · 
+  <a href="mailto:salman.ismail.shaikh@accenture.com" style="color:#4c9ffe;text-decoration:none;">
+    salman.ismail.shaikh@accenture.com
+  </a>
+</footer>
+
+</body>
+</html>
