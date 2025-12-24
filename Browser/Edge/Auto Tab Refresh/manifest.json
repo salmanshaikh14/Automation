@@ -1,0 +1,13 @@
+{
+  "manifest_version": 3,
+  "name": "Auto Refresh - Select Tab",
+  "version": "1.4",
+  "description": "Refresh a selected tab every 5 seconds with status and error display.",
+  "permissions": ["tabs"],
+  "action": {
+    "default_popup": "popup.html"
+  },
+  "background": {
+    "service_worker": "background.js"
+  }
+}

@@ -1,0 +1,14 @@
+{
+  "manifest_version": 3,
+  "name": "Auto Clicker - Select Tab",
+  "version": "1.2",
+  "description": "Click a button on a selected tab: first after 1s, then at a custom interval.",
+  "permissions": ["tabs", "scripting"],
+  "host_permissions": ["<all_urls>"],
+  "action": {
+    "default_popup": "popup.html"
+  },
+  "background": {
+    "service_worker": "background.js"
+  }
+}
