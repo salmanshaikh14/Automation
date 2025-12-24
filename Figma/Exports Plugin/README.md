@@ -3,7 +3,7 @@
 A powerful Figma plugin to export selected frames as **PNG/JPEG**, preview estimated sizes, auto-adjust DPI to meet size limits, and export everything in **one ZIP file** — perfect for Brand and Paid Media workflows.
 
 > Designed by **Salman Shaikh**  
-> 📧 salman.ismail.shaikh@accenture.com
+
 
 ---
 
